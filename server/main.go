@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"go.uber.org/zap"
 	"io"
 	"log"
@@ -20,21 +19,21 @@ type Server struct {
 
 func (s *Server) acceptLoop() {
 	for {
-		s.log.Infof("accepting connections on %s", s.ListenAddr)
 		conn, err := s.l.Accept()
 		if err != nil {
-			log.Fatalf("error accepting connection: %s", err.Error())
+			s.log.Error("error accepting connection: %s", err.Error())
+			continue
 		}
-		go s.process(conn)
+		go s.handle(conn)
 	}
 }
 
-func (s *Server) process(conn net.Conn) {
+func (s *Server) handle(conn net.Conn) {
 	defer func() {
 		s.log.Infof("closing connection on %s", conn.RemoteAddr())
 		conn.Close()
 	}()
-
+	s.log.Infof("new connection on %s", conn.RemoteAddr())
 	for {
 		data := make([]byte, 1024)
 		n, err := conn.Read(data)
@@ -46,28 +45,30 @@ func (s *Server) process(conn net.Conn) {
 			log.Println("Error reading data: ", err.Error())
 		}
 
-		log.Printf("Received %d bytes: %s\n", n, data[:n])
+		msg := make([]byte, n)
+		copy(msg, data[:n])
 
-		resp := fmt.Sprint("+PONG\r\n")
-
-		_, err = conn.Write([]byte(resp))
-		if err != nil {
-			log.Println("Error writing data: ", err.Error())
-		}
+		log.Println("read:", string(msg))
 	}
 }
 
-func NewServer(config Config, log *zap.SugaredLogger) (*Server, error) {
-	l, err := net.Listen("tcp", config.ListenAddr)
+func (s *Server) Start() error {
+	l, err := net.Listen("tcp", s.ListenAddr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
+	s.log.Infof("accepting connections on %s", s.ListenAddr)
+
+	s.l = l
+	return nil
+}
+
+func NewServer(config Config, log *zap.SugaredLogger) *Server {
 	return &Server{
 		Config: config,
-		l:      l,
 		log:    log,
-	}, nil
+	}
 }
 
 func main() {
@@ -76,7 +77,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	s, err := NewServer(Config{ListenAddr: "0.0.0.0:6379"}, logger.Sugar())
+	s := NewServer(Config{ListenAddr: "0.0.0.0:36379"}, logger.Sugar())
+	err = s.Start()
 	if err != nil {
 		log.Fatal(err)
 	}
