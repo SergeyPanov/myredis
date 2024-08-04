@@ -49,6 +49,10 @@ func (s *Server) handle(conn net.Conn) {
 		copy(msg, data[:n])
 
 		log.Println("read:", string(msg))
+
+		parseCommand(string(msg))
+
+		conn.Write([]byte("+OK\r\n"))
 	}
 }
 
